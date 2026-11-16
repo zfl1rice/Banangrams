@@ -26,7 +26,7 @@ class TilePool {
     // Return the remaining number of tiles.
     [[nodiscard]] std::size_t size() const;
     // Sample the current pool, including returns; nullopt means empty.
-    [[nodiscard]] char draw();
+    [[nodiscard]] std::optional<char> draw();
     // Draw at most count tiles; zero or an empty pool returns an empty vector.
     [[nodiscard]] std::vector<char> draw_up_to(std::size_t count);
     // Return A-Z to the pool; unsupported letters return false unchanged.

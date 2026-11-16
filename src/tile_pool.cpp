@@ -17,9 +17,9 @@ std::size_t TilePool::size() const {
     return this->LETTERS.size();
 }
 // TODO: Sample the current pool; define portable sampling later if replay needs it.
-char TilePool::draw() {
+std::optional<char> TilePool::draw() {
     if (this->LETTERS.size() == 0){
-        return NULL;
+        return std::nullopt;
     }
     std::mt19937 gen(this->SEED);
 
@@ -38,9 +38,9 @@ char TilePool::draw() {
 std::vector<char> TilePool::draw_up_to(std::size_t count) {
     std::vector<char> res = {};
     for (int i = 0; i < count; i ++) {
-        char next_letter = draw();
-        if (next_letter != NULL) {
-            res.push_back(next_letter);
+        auto next_letter = draw();
+        if (next_letter != std::nullopt) {
+            res.push_back(*next_letter);
         } else {
             return res;
         }
@@ -48,7 +48,7 @@ std::vector<char> TilePool::draw_up_to(std::size_t count) {
     return res;
 }
 bool TilePool::return_tile(char letter) {
-    if (!std::isalpha(static_cast<unsigned char>(letter))) {
+    if (!(letter >= 'A' && letter <= 'Z')) {
         return false;
     }
 
