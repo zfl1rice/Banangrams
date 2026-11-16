@@ -1,11 +1,9 @@
 #include "bananagrams/rack.hpp"
 
 #include <stdexcept>
-#include <cctype>
 
 namespace bananagrams {
 
-// TODO: Implement counts and A-Z validation; preserve state on mutation failure.
 bool Rack::empty() const {
     return this->NUM_TILES == 0;
 }
@@ -13,34 +11,35 @@ std::size_t Rack::size() const {
     return this->NUM_TILES;
 }
 int Rack::count(char letter) const {
-    if (!std::isalpha(static_cast<unsigned char>(letter))) {
+    if (!(letter >= 'A' && letter <= 'Z')) {
         return 0;
     }
-    int idx = std::tolower(static_cast<unsigned char>(letter)) - 'a' + 1;
+    int idx = letter - 'A';
     return this->CURR_COUNTS[idx];
 }
 bool Rack::add(char letter) {
-    if (!std::isalpha(static_cast<unsigned char>(letter))) {
+    if (!(letter >= 'A' && letter <= 'Z')) {
         return false;
     }
-    int idx = std::tolower(static_cast<unsigned char>(letter)) - 'a' + 1;
+    int idx = letter - 'A';
     this->CURR_COUNTS[idx] ++;
+    this->NUM_TILES ++;
     return true;
 }
 bool Rack::remove(char letter) {
-    if (!std::isalpha(static_cast<unsigned char>(letter))) {
+    if (!(letter >= 'A' && letter <= 'Z')) {
         return false;
     }
-    int idx = std::tolower(static_cast<unsigned char>(letter)) - 'a' + 1;
+    int idx = letter - 'A';
     if (this->CURR_COUNTS[idx] > 0) {
         this->CURR_COUNTS[idx] --;
+        this->NUM_TILES --;
         return true;
     }
     return false;
 }
 const std::array<int, 26>& Rack::counts() const {
-    std::array<int, 26> res = this->CURR_COUNTS;
-    return res;
+    return this->CURR_COUNTS;
 }
 
 } // namespace bananagrams
