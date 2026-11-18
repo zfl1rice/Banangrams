@@ -13,8 +13,10 @@ namespace bananagrams {
 // All non-default methods currently throw std::logic_error until implemented.
 class Board {
   private:
-    std::map<Position, char> BOARD;
-    int NUM_OCCUPIED;
+    std::map<Position, char> BOARD{};
+    int NUM_OCCUPIED = 0;
+    std::map<Position, char> tiles_;
+    static std::optional<int> safe_add(int a, int b);
   public:
     Board() = default;
 
@@ -26,7 +28,8 @@ class Board {
     [[nodiscard]] bool contains(Position position) const;
     // Return the letter, or nullopt for an empty square.
     [[nodiscard]] std::optional<char> tile_at(Position position) const;
-    // Place A-Z; return false without changes for invalid letters or occupancy.
+    // Place A-Z, replacing any existing tile; replacement leaves size unchanged.
+    // Invalid letters return false without changes.
     // Disconnected arrangements and temporary invalid words are allowed.
     [[nodiscard]] bool place(Position position, char letter);
     // Remove and return a letter; a missing square returns nullopt unchanged.
@@ -38,8 +41,6 @@ class Board {
     // Read-only access prevents callers from bypassing placement/movement rules.
     [[nodiscard]] const std::map<Position, char>& tiles() const;
 
-  private:
-    std::map<Position, char> tiles_;
 };
 
 } // namespace bananagrams
