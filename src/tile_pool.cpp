@@ -9,6 +9,7 @@ namespace bananagrams {
 TilePool::TilePool(std::vector<char> init_letters, std::uint32_t seed) {
     this->LETTERS = init_letters;
     this->SEED = seed;
+    this->rng_.seed(this->SEED);
 }
 bool TilePool::empty() const {
     return this->LETTERS.size() == 0;
@@ -21,11 +22,10 @@ std::optional<char> TilePool::draw() {
     if (this->LETTERS.size() == 0){
         return std::nullopt;
     }
-    std::mt19937 gen(this->SEED);
 
-    std::uniform_int_distribution<int> dist(0, this->LETTERS.size());
+    std::uniform_int_distribution<int> dist(0, this->LETTERS.size() - 1);
 
-    int idx = dist(gen);
+    int idx = dist(this->rng_);
 
     char res = this->LETTERS[idx];
 

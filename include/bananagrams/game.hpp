@@ -13,14 +13,16 @@
 namespace bananagrams {
 
 // Owns inventory and rules; actions are sequential and the engine never sleeps.
-// All methods currently throw logic_error (construction also reaches TODO dependencies).
-// Future expected action failures return codes and leave all state unchanged.
+// Unfinished methods throw logic_error.
+// Expected action failures return codes and leave all state unchanged.
 class Game {
   public:
     // Validate config (invalid_argument on failure), build the pool, and deal racks.
     Game(GameConfig config, Lexicon lexicon);
 
-    // Transfer an available A-Z rack tile to a free square; failure changes nothing.
+    // Transfer an available A-Z rack tile to the board, returning any replaced tile
+    // to the rack. Same-letter replacement is a no-op; failures change nothing.
+    // Empty-rack validation and automatic draws/completion belong to the same action.
     [[nodiscard]] ActionResult place_tile(PlayerId player, char letter, Position position);
     // Return selected board tiles to the rack atomically; reject empty/duplicate/missing sources.
     [[nodiscard]] ActionResult return_tiles(PlayerId player,

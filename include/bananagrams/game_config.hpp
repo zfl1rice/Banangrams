@@ -12,6 +12,7 @@ enum class GameMode { solo, multiplayer };
 // Game construction will reject invalid configurations with invalid_argument:
 // solo needs exactly 1 player, multiplayer >= 2, starting rack > 0,
 // counts >= 0, and enough tiles to deal all racks (check totals without overflow).
+// Total supply must fit in int because rack counters and pool sampling use int.
 struct GameConfig {
     GameMode mode;
     std::size_t player_count;

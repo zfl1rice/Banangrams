@@ -1,16 +1,33 @@
 #include "bananagrams/board_validator.hpp"
 
-#include <climits>
-#include <optional>
-#include <stdexcept>
 #include <array>
+#include <climits>
+#include <map>
+#include <optional>
 #include <unordered_set>
-#include <tuple>
+#include <utility>
+#include <vector>
 
 namespace bananagrams {
 namespace {
 
-// Return the sum, or nullopt if adding would exceed the range of int.
+enum class Direction { horizontal, vertical };
+
+struct WordStart {
+    Position position;
+    Direction direction;
+};
+
+constexpr std::array<Position, 4> neighbor_offsets{{
+    {-1, 0}, // Up
+    {1, 0},  // Down
+    {0, -1}, // Left
+    {0, 1}   // Right
+}};
+
+constexpr std::array<Direction, 2> word_directions{Direction::horizontal, Direction::vertical};
+
+// Return nullopt if the sum cannot be represented as an int.
 std::optional<int> safe_add(int a, int b) {
     if (b > 0 && a > INT_MAX - b) {
         return std::nullopt;
@@ -21,118 +38,118 @@ std::optional<int> safe_add(int a, int b) {
     return a + b;
 }
 
+// Move a coordinate without overflowing either component.
+std::optional<Position> offset_position(Position position, Position offset) {
+    const auto row = safe_add(position.row, offset.row);
+    const auto col = safe_add(position.col, offset.col);
+
+    if (!row.has_value() || !col.has_value()) {
+        return std::nullopt;
+    }
+
+    return Position{*row, *col};
+}
+
+// Words are read rightward or downward.
+Position word_step(Direction direction) {
+    return direction == Direction::horizontal ? Position{0, 1} : Position{1, 0};
+}
+
+// The current tile starts a word if there is no preceding tile and
+// there is a following tile. This excludes single-letter runs.
+bool is_word_start(const Board& board, Position position, Direction direction) {
+    const Position step = word_step(direction);
+    const auto previous = offset_position(position, {-step.row, -step.col});
+
+    if (previous.has_value() && board.contains(*previous)) {
+        return false;
+    }
+
+    const auto next = offset_position(position, step);
+    return next.has_value() && board.contains(*next);
+}
+
+// Collect the maximal run and its positions in reading order.
+// Position is passed by value, so advancing it does not change the caller's start.
+WordOccurrence read_word(const Board& board, Position position, Direction direction) {
+    WordOccurrence word;
+    const Position step = word_step(direction);
+
+    while (const auto letter = board.tile_at(position)) {
+        word.text += *letter;
+        word.positions.push_back(position);
+
+        const auto next = offset_position(position, step);
+        if (!next.has_value()) {
+            break;
+        }
+
+        position = *next;
+    }
+
+    return word;
+}
+
 } // namespace
 
-// TODO: Report maximal words and connected components with their tile positions.
-ValidationResult validate_board(const Board& Board, const Lexicon& lexicon) {
-    std::map<Position, char> curr_state = Board.tiles();
-    ValidationResult res{};
-    res.valid = false;
+ValidationResult validate_board(const Board& board, const Lexicon& lexicon) {
+    ValidationResult result{};
+    result.has_at_least_two_tiles = board.size() >= 2;
 
-    if (curr_state.size() < 2) {
-        res.has_at_least_two_tiles = false;
-    } else {
-        res.has_at_least_two_tiles = true;
-    }
+    // Removing visited tiles from this copy leaves the original board unchanged.
+    std::map<Position, char> remaining_tiles = board.tiles();
+    std::vector<WordStart> word_starts;
 
-    constexpr std::array<std::pair<int, int>, 4> dirs = {{
-        {-1,  0}, // Up
-        { 1,  0}, // Down
-        { 0, -1}, // Left
-        { 0,  1}  // Right
-    }};
-
-    std::vector<std::tuple<Position, int>> word_beginnings{};
-
-    while (curr_state.size() > 0) {
-        
-        Position starting_point = curr_state.begin()->first;
+    while (!remaining_tiles.empty()) {
+        const Position start = remaining_tiles.begin()->first;
         std::vector<Position> component;
-        std::unordered_set<Position> seen;
+        std::unordered_set<Position> seen{start};
+        std::vector<Position> stack{start};
 
-        seen.emplace(starting_point);
-
-        std::vector<Position> stack{};
-        stack.push_back(starting_point);
-
-        while (stack.size() > 0) {
-            Position curr_pos = stack.back();
-            component.push_back(curr_pos);
-            curr_state.erase(curr_pos);
+        while (!stack.empty()) {
+            const Position current = stack.back();
             stack.pop_back();
 
-            for (const auto& [dx, dy] : dirs) {
-                const auto new_row = safe_add(curr_pos.row, dx);
-                const auto new_col = safe_add(curr_pos.col, dy);
+            component.push_back(current);
+            remaining_tiles.erase(current);
 
-                const bool neighbor_exists = new_row.has_value() && new_col.has_value() &&
-                    Board.contains(Position{*new_row, *new_col});
+            // Word starts depend on surrounding tiles, not DFS visitation order.
+            for (Direction direction : word_directions) {
+                if (is_word_start(board, current, direction)) {
+                    word_starts.push_back(WordStart{current, direction});
+                }
+            }
 
-                if (neighbor_exists) {
-                    Position new_pos{*new_row, *new_col};
-                    if (seen.count(new_pos) == 0) {
-                        stack.push_back(new_pos);
-                        seen.emplace(new_pos);
-                    }
-                } else {
-                    if (dx == -1 && dy == 0) {
-                        const auto below_row = safe_add(curr_pos.row, 1);
-                        if (below_row.has_value() &&
-                            Board.contains(Position{*below_row, curr_pos.col})) {
-                            word_beginnings.push_back(std::make_tuple(curr_pos, 0));
-                        }
-                    }
-                    if (dx == 0 && dy == -1) {
-                        const auto right_col = safe_add(curr_pos.col, 1);
-                        if (right_col.has_value() &&
-                            Board.contains(Position{curr_pos.row, *right_col})) {
-                            word_beginnings.push_back(std::make_tuple(curr_pos, 1));
-                        }
-                    }
+            for (Position offset : neighbor_offsets) {
+                const auto neighbor = offset_position(current, offset);
+
+                // Coordinates beyond the integer limits represent absent neighbors.
+                if (!neighbor.has_value() || !board.contains(*neighbor)) {
+                    continue;
+                }
+
+                // Mark on insertion so each tile enters the stack only once.
+                if (seen.insert(*neighbor).second) {
+                    stack.push_back(*neighbor);
                 }
             }
         }
-        res.connected_components.push_back(component);
+
+        result.connected_components.push_back(std::move(component));
     }
 
-    for (auto& [starting_pos, direction] : word_beginnings) {
-        std::string curr_word;
-        std::vector<Position> curr_word_locs;
-        if (direction == 1) {
-            while (Board.contains(starting_pos)) {
-                curr_word_locs.push_back(starting_pos);
-                curr_word += *Board.tile_at(starting_pos);
-                const auto r_col = safe_add(starting_pos.col, 1);
-                if (r_col.has_value()) {
-                    starting_pos = Position{starting_pos.row, *r_col};
-                } else {
-                    break;
-                }
-            }
-        } else {
-            while (Board.contains(starting_pos)) {
-                curr_word_locs.push_back(starting_pos);
-                curr_word += *Board.tile_at(starting_pos);
-                const auto b_row = safe_add(starting_pos.row, 1);
-                if (b_row.has_value()) {
-                    starting_pos = Position{*b_row, starting_pos.col};
-                } else {
-                    break;
-                }
-            }
+    for (const WordStart& start : word_starts) {
+        WordOccurrence word = read_word(board, start.position, start.direction);
+
+        if (!lexicon.contains(word.text)) {
+            result.invalid_words.push_back(std::move(word));
         }
-        if (!lexicon.contains(curr_word)) {
-            res.invalid_words.push_back(WordOccurrence{curr_word, curr_word_locs});
-            res.valid = false;
-        }
-
     }
 
-    if (res.connected_components.size() == 1 && res.invalid_words.size() == 0 && res.has_at_least_two_tiles) {
-        res.valid = true;
-    }
-    return res;
+    result.valid = result.has_at_least_two_tiles && result.connected_components.size() == 1 &&
+                   result.invalid_words.empty();
 
+    return result;
 }
 
 } // namespace bananagrams

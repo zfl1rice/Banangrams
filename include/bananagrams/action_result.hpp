@@ -17,7 +17,8 @@ enum class ActionError {
     missing_board_tile,
     coordinate_overflow,
     inventory_overflow,
-    finished_match
+    finished_match,
+    invalid_move
 };
 
 // A successful action can cause an automatic solo draw, multiplayer peel, or finish.
