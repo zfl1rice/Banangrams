@@ -1,10 +1,22 @@
-# Bananagrams C++ engine skeleton
+# Bananagrams — C++ engine and solo browser game
 
-This is a learning scaffold for a native solo/multiplayer engine. The build,
-CLI, and trivial value-type smoke tests work. **Gameplay is not implemented.**
-Every nontrivial method throws `std::logic_error("TODO: ...")`, including basic
-Rack/Board queries and accessors. Constructors for Lexicon, TilePool, and Game
-are unfinished too. Passing smoke tests do not establish gameplay correctness.
+The C++20 engine implements inventory, sparse boards, atomic group moves,
+dictionary validation, automatic peels, dumps, and completion. The desktop
+browser game in `web/` uses React/TypeScript and the real engine compiled with
+Emscripten, owned by a Web Worker. No gameplay rules are reimplemented in the UI.
+
+**[Build and play the browser game](docs/browser.md)** — includes native and
+WebAssembly commands, frontend tests, architecture, controls, and verification.
+
+The approved production vocabulary and configuration are still missing. The
+start screen supports a user-supplied newline-separated word list and editable
+tile configuration. Its separately labeled development table uses only the
+four-word fixture. No substitute production dictionary is bundled.
+
+The remaining sections below record the original scaffold setup. Their native
+toolchain instructions remain useful, but statements about unimplemented engine
+methods and the old test counts are historical. The CLI still prints its original
+skeleton message; use the browser frontend to play.
 
 ## Required tools
 

@@ -1,0 +1,30 @@
+{
+  "name": "bananagrams-solo",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "build:wasm": "emcmake cmake -S .. -B ../build/wasm -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF && cmake --build ../build/wasm --target bananagrams_web",
+    "predev": "node scripts/check-assets.mjs",
+    "prebuild": "node scripts/check-assets.mjs",
+    "dev": "vite --host 127.0.0.1",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview --host 127.0.0.1",
+    "test": "vitest run",
+    "test:browser": "playwright test"
+  },
+  "dependencies": {
+    "react": "19.1.1",
+    "react-dom": "19.1.1"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.56.1",
+    "@types/node": "24.7.2",
+    "@types/react": "19.1.16",
+    "@types/react-dom": "19.1.9",
+    "@vitejs/plugin-react": "5.0.4",
+    "typescript": "5.9.3",
+    "vite": "7.1.12",
+    "vitest": "3.2.4"
+  }
+}

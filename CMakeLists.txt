@@ -71,6 +71,10 @@ target_link_libraries(bananagrams_engine PRIVATE bananagrams_options)
 add_executable(bananagrams_cli apps/cli/main.cpp)
 target_link_libraries(bananagrams_cli PRIVATE bananagrams::engine bananagrams_options)
 
+if(EMSCRIPTEN)
+    add_subdirectory(bindings/wasm)
+endif()
+
 include(CTest)
 if(BUILD_TESTING)
     include(FetchContent)
@@ -82,6 +86,15 @@ if(BUILD_TESTING)
     set(DOCTEST_WITH_TESTS OFF CACHE BOOL "" FORCE)
     set(DOCTEST_NO_INSTALL ON CACHE BOOL "" FORCE)
     FetchContent_MakeAvailable(doctest)
+
+    # Include the existing component suites as well as the game suites below.
+    foreach(component IN ITEMS board rack lexicon tile_pool)
+        add_executable(bananagrams_${component}_tests tests/${component}_test.cpp)
+        target_link_libraries(bananagrams_${component}_tests PRIVATE
+            bananagrams::engine bananagrams_options doctest::doctest)
+        add_test(NAME ${component} COMMAND bananagrams_${component}_tests)
+        set_tests_properties(${component} PROPERTIES TIMEOUT 30)
+    endforeach()
 
     add_executable(bananagrams_tests tests/smoke_test.cpp)
     target_link_libraries(bananagrams_tests PRIVATE

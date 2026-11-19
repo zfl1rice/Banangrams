@@ -35,3 +35,11 @@ Thumbs.db
 *.exp
 *.idb
 *.pch
+
+# Browser dependencies and generated assets
+web/node_modules/
+web/dist/
+web/public/engine/
+web/test-results/
+web/playwright-report/
+web/*.tsbuildinfo
