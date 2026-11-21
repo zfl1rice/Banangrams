@@ -112,8 +112,10 @@ and normalizes case. C++ validates entries; words must contain uppercase A–Z a
 at least two letters. Duplicates are deduplicated by the engine. Files stay in
 the browser and are never uploaded.
 
-Vocabulary policy, review decisions and rebuild instructions are documented in
-`data/lexicon/README.md`. There is no approved production tile/rack configuration.
+Only the final `data/lexicon/words.txt` is published as lexicon data. The generator,
+review records and intermediate files stay in the local vocabulary workspace and
+are ignored by Git. Source attribution and license notices are included in
+`docs/word-list-notices.txt`. There is no approved production tile/rack configuration.
 Table settings expose a provisional editable 144-tile distribution
 and 21-tile rack. Each letter in the supply field represents one tile. New games
 use a new random seed; rack shuffling never touches engine randomness.

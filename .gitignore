@@ -47,3 +47,9 @@ web/*.tsbuildinfo
 # Offline vocabulary tooling (source archives live under ignored build/)
 __pycache__/
 *.pyc
+
+# Publish only the final lexicon; keep its generator and review workspace local.
+/data/lexicon/*
+!/data/lexicon/words.txt
+/tools/lexicon/
+/tests/test_lexicon_pipeline.py

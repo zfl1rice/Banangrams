@@ -1,2 +1,0 @@
-# Python 3.11+ standard library only; no pip dependencies.
-# ESDB's Python parser is downloaded at the commit in sources.json.
