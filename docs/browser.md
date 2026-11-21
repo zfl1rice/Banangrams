@@ -1,7 +1,8 @@
 # Solo browser game
 
 The frontend in `web/` is a playable desktop game backed by the existing C++
-engine. The engine sources and public headers have not been changed. The added
+engine. Selected-region verification reuses the engine's board validator through
+the read-only `Game::validate_selection` method. The added
 binding target is conditional on Emscripten; native library and CLI targets remain.
 Existing CMake edits were preserved. Four pre-existing standalone component
 suites (board, rack, lexicon, tile pool) are now also registered with CTest.
@@ -78,6 +79,19 @@ environment.
 
 ## Build and play
 
+Shift-drag or use **Shift + arrow keys** to select tiles, then click **Verify selected** to check that region
+alone. Horizontal and vertical runs must be in the loaded word list, with at
+least two tiles and one connected group. Tiles outside the selection are ignored,
+including adjacent tiles. The result names invalid words and highlights problems
+until the next board edit. Verification consumes the selection but does not move
+tiles, change placement undo history, draw from the pool, or finish the game.
+
+Shift + arrows anchor a rectangle at the cursor's starting square and move its
+opposite corner. Repeated presses extend or shrink it in either dimension,
+including across empty squares; only occupied squares are selected. Releasing
+Shift keeps the region. A plain arrow or another action clears it, and the next
+Shift + arrow starts a fresh rectangle at the current cursor.
+
 ```sh
 cd web
 npm ci
@@ -89,16 +103,18 @@ production build commands fail early with instructions if the engine assets are
 missing. Choose **Try development table** for a three-tile demonstration: type
 `CAT` to finish. This is explicitly limited to `CAT`, `ARE`, `AT`, and `QI`.
 
-For a longer game, load your own newline-separated `.txt` vocabulary and choose
-**Start Solo**. The loader trims lines, drops blank lines, removes a leading BOM,
+Choose **Start Solo** to play with the approved `data/lexicon/words.txt` vocabulary,
+which is bundled into the frontend at build time and selected by default. Rebuild
+the frontend after regenerating the word list to include its latest contents.
+You can optionally load a different newline-separated `.txt` vocabulary. The
+custom-file loader trims lines, drops blank lines, removes a leading BOM,
 and normalizes case. C++ validates entries; words must contain uppercase A–Z and
 at least two letters. Duplicates are deduplicated by the engine. Files stay in
 the browser and are never uploaded.
 
-**Missing assets:** the repository's approved production vocabulary has not been
-produced. Its policy is documented in `docs/implementation_plan.md`; no broad
-dictionary has been substituted. There is also no approved production tile/rack
-configuration. Table settings expose a provisional editable 144-tile distribution
+Vocabulary policy, review decisions and rebuild instructions are documented in
+`data/lexicon/README.md`. There is no approved production tile/rack configuration.
+Table settings expose a provisional editable 144-tile distribution
 and 21-tile rack. Each letter in the supply field represents one tile. New games
 use a new random seed; rack shuffling never touches engine randomness.
 
@@ -122,12 +138,20 @@ registration, or deployment is needed.
   Matching board letters advance without consuming a tile. Conflicts do not advance.
 - Tab switches horizontal/vertical typing while the board has focus. Arrow keys
   move the cursor; Space steps forward. Click another control to leave board focus.
-- Backspace returns the preceding tile and moves back. Delete returns the current
+- With a selected region, Backspace returns all selected tiles to the rack in one
+  action, clears the selection and leaves the cursor in place.
+  Otherwise, after clicking a square or navigating with arrow keys, Backspace returns the
+  current tile and leaves the cursor in place. An empty square does nothing.
+  After typing or stepping forward with Space, Backspace returns the preceding
+  tile and moves back only when a tile is there. Delete always returns the current
   tile and leaves the cursor in place.
 - Ctrl+Z / Cmd+Z returns the latest placed tile. Undo is not a rollback: draws,
   peels, dumps, and the pool remain as they are. Manual moves/removals clear history.
 - Click a rack tile then an empty square, or drag it onto the board. Sort and
   Shuffle affect display order only. Dump selected works even with an empty pool.
+- A region selection lasts for the next action only. Unmodified arrow keys, typing (even an
+  unsuccessful attempt), direction changes, clicks, pan/zoom and other controls
+  clear it. Moving or returning a group consumes the selection, even on failure.
 - Drag a board tile to move it or return it to the rack. Shift-drag a rectangle,
   then drag any selected tile to move the whole group atomically. Return selected
   sends the entire selection through the engine's return action.

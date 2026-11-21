@@ -1,0 +1,5 @@
+# Keep reproducible vocabulary artifacts and their hashed inputs stable on Windows.
+data/lexicon/** text eol=lf
+tools/lexicon/** text eol=lf
+tests/test_lexicon_pipeline.py text eol=lf
+tests/lexicon_file_check.cpp text eol=lf

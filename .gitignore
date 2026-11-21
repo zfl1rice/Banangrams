@@ -43,3 +43,7 @@ web/public/engine/
 web/test-results/
 web/playwright-report/
 web/*.tsbuildinfo
+
+# Offline vocabulary tooling (source archives live under ignored build/)
+__pycache__/
+*.pyc

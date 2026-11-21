@@ -101,6 +101,31 @@ if(BUILD_TESTING)
         bananagrams::engine bananagrams_options doctest::doctest)
     add_test(NAME scaffold_smoke COMMAND bananagrams_tests)
     add_test(NAME cli_smoke COMMAND bananagrams_cli)
+
+    # Gameplay contract tests remain separate from the scaffold smoke checks.
+    add_executable(bananagrams_game_tests tests/game_initialization_test.cpp)
+    target_link_libraries(bananagrams_game_tests PRIVATE
+        bananagrams::engine bananagrams_options doctest::doctest)
+    add_test(NAME game_initialization COMMAND bananagrams_game_tests)
+
+    add_executable(bananagrams_game_behavior_tests tests/game_test.cpp)
+    target_link_libraries(bananagrams_game_behavior_tests PRIVATE
+        bananagrams::engine bananagrams_options doctest::doctest)
+    add_test(NAME game_behavior COMMAND bananagrams_game_behavior_tests)
+    set_tests_properties(game_behavior PROPERTIES TIMEOUT 30)
+
+    add_executable(bananagrams_setup_tests tests/game_setup_test.cpp)
+    target_link_libraries(bananagrams_setup_tests PRIVATE
+        bananagrams::engine bananagrams_options doctest::doctest)
+    add_test(NAME game_setup_and_placement COMMAND bananagrams_setup_tests)
+    set_tests_properties(game_setup_and_placement PROPERTIES TIMEOUT 20)
+
+    add_executable(bananagrams_validator_tests tests/board_validator_test.cpp)
+    target_link_libraries(bananagrams_validator_tests PRIVATE
+        bananagrams::engine bananagrams_options doctest::doctest)
+    add_test(NAME board_validator COMMAND bananagrams_validator_tests)
+    # A traversal regression must fail instead of hanging the test runner forever.
+    set_tests_properties(board_validator PROPERTIES TIMEOUT 20)
     set_tests_properties(cli_smoke PROPERTIES
         PASS_REGULAR_EXPRESSION "engine skeleton: gameplay is not implemented yet")
 endif()
