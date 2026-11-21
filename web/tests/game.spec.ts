@@ -28,6 +28,35 @@ async function drag(
   await page.mouse.move(to.x, to.y, { steps: 8 });
   await page.mouse.up();
 }
+for (const word of ["FURTHEST", "TOAD", "CLOUDY", "BANJO", "GYM", "PHONE", "RHINO", "TRANS", "DO", "SO", "HERESY", "HERESIES", "THEOLOGY", "BISHOP", "NUN", "HYMN", "NOEL"]) {
+test(`default vocabulary starts without an upload and accepts ${word}`, async ({ page }) => {
+  await page.goto("/");
+  await expect(page.locator(".file-summary")).toContainText("words.txt");
+  await expect(page.getByRole("button", { name: "Start Solo", exact: true })).toBeEnabled();
+  await page.getByText("Table settings", { exact: true }).click();
+  await page.getByLabel("Starting rack size").fill(String(word.length));
+  await page.getByLabel("Tile supply (one letter per tile)").fill(word);
+  await page.getByRole("button", { name: "Start Solo", exact: true }).click();
+  await expect(page.getByTestId("board")).toBeVisible();
+  await page.keyboard.type(word.toLowerCase(), { delay: 0 });
+  await expect(page.getByText("You cleared the pool.", { exact: false }).first()).toBeVisible();
+});
+}
+
+for (const word of ["INFO", "BIZ", "LAB", "EXAM", "SH", "FA", "HM", "MI", "LA", "CD", "INC", "ED", "PFFT", "JESUS", "CHRIST", "ALLAH", "SATAN"]) {
+  test(`default vocabulary rejects excluded spelling ${word}`, async ({ page }) => {
+    await page.goto("/");
+    await page.getByText("Table settings", { exact: true }).click();
+    await page.getByLabel("Starting rack size").fill(String(word.length));
+    await page.getByLabel("Tile supply (one letter per tile)").fill(word);
+    await page.getByRole("button", { name: "Start Solo", exact: true }).click();
+    await expect(page.getByTestId("board")).toBeVisible();
+    await page.keyboard.type(word.toLowerCase(), { delay: 0 });
+    await expect(page.locator(".board-tile.invalid")).toHaveCount(word.length);
+    await expect(page.getByText("You cleared the pool.", { exact: false })).toHaveCount(0);
+  });
+}
+
 test("actual wasm worker: rapid CAT finishes and leaves board inspectable", async ({
   page,
 }) => {
@@ -98,6 +127,141 @@ test("actual wasm: invalid highlights clear after edit; matching crossing consum
   await expect(page.getByTestId("cursor")).toHaveAttribute("data-col", "1");
   await expect(page.getByTestId("tile-0-1")).toHaveText("T");
 });
+test("Backspace targets tiles reached by arrows and clicks, then resumes typing behavior", async ({ page }) => {
+  await custom(page, "CATT", 4, "CAT");
+  await page.keyboard.type("cat");
+  await expect(page.getByTestId("tile-0-2")).toHaveText("T");
+  await page.keyboard.press("ArrowLeft");
+  await page.keyboard.press("ArrowLeft");
+  await page.keyboard.press("Backspace");
+  await expect(page.getByTestId("tile-0-1")).toHaveCount(0);
+  await expect(page.getByTestId("tile-0-0")).toHaveText("C");
+  await expect(page.getByTestId("cursor")).toHaveAttribute("data-col", "1");
+  await page.keyboard.press("Backspace");
+  await expect(page.getByTestId("tile-0-0")).toHaveText("C");
+  await expect(page.getByTestId("cursor")).toHaveAttribute("data-col", "1");
+  await page.keyboard.type("a");
+  await expect(page.getByTestId("tile-0-1")).toHaveText("A");
+  await page.keyboard.press("Backspace");
+  await expect(page.getByTestId("tile-0-1")).toHaveCount(0);
+  await expect(page.getByTestId("tile-0-2")).toHaveText("T");
+  const tile = await page.getByTestId("tile-0-2").boundingBox();
+  await page.mouse.click(tile!.x + tile!.width / 2, tile!.y + tile!.height / 2);
+  await page.keyboard.press("Backspace");
+  await expect(page.getByTestId("tile-0-2")).toHaveCount(0);
+  await expect(page.getByTestId("cursor")).toHaveAttribute("data-col", "2");
+  await expect(page.locator(".rack-tile")).toHaveCount(3);
+});
+
+async function selectRegion(page: Page, first: string, last: string) {
+  const start = await page.getByTestId(first).boundingBox();
+  const end = await page.getByTestId(last).boundingBox();
+  await page.keyboard.down("Shift");
+  await drag(page, { x: start!.x + 2, y: start!.y + 2 },
+    { x: end!.x + end!.width - 2, y: end!.y + end!.height - 2 });
+  await page.keyboard.up("Shift");
+}
+
+test("Backspace returns a selected region; arrow navigation expires it before the next deletion", async ({ page }) => {
+  await custom(page, "CATT", 4, "CAT");
+  await page.keyboard.type("cat");
+  await expect(page.getByTestId("tile-0-2")).toHaveText("T");
+  await selectRegion(page, "tile-0-0", "tile-0-1");
+  await expect(page.locator(".board-tile.selected")).toHaveCount(2);
+  await page.keyboard.press("ArrowLeft");
+  await expect(page.locator(".board-tile.selected")).toHaveCount(0);
+  await page.keyboard.press("Backspace");
+  await expect(page.getByTestId("tile-0-2")).toHaveCount(0);
+  await expect(page.getByTestId("tile-0-0")).toHaveText("C");
+  await expect(page.getByTestId("tile-0-1")).toHaveText("A");
+  await selectRegion(page, "tile-0-0", "tile-0-1");
+  await expect(page.locator(".board-tile.selected")).toHaveCount(2);
+  await page.keyboard.press("Backspace");
+  await expect(page.locator(".board-tile")).toHaveCount(0);
+  await expect(page.locator(".rack-tile")).toHaveCount(4);
+  await expect(page.getByTestId("cursor")).toHaveAttribute("data-col", "2");
+  await expect(page.getByRole("button", { name: "Return selected", exact: true })).toBeDisabled();
+});
+
+test("camera actions, unsuccessful typing and outside clicks expire a region", async ({ page }) => {
+  await custom(page, "CATT", 4, "CAT");
+  await page.keyboard.type("cat");
+  await expect(page.getByTestId("tile-0-2")).toHaveText("T");
+  await selectRegion(page, "tile-0-0", "tile-0-1");
+  await expect(page.locator(".board-tile.selected")).toHaveCount(2);
+  await page.getByRole("button", { name: "Zoom in" }).click();
+  await expect(page.locator(".board-tile.selected")).toHaveCount(0);
+  await selectRegion(page, "tile-0-0", "tile-0-1");
+  await expect(page.locator(".board-tile.selected")).toHaveCount(2);
+  const boardBox = await page.getByTestId("board").boundingBox();
+  await drag(page, { x: boardBox!.x + 20, y: boardBox!.y + 20 },
+    { x: boardBox!.x + 50, y: boardBox!.y + 50 });
+  await expect(page.locator(".board-tile.selected")).toHaveCount(0);
+  await selectRegion(page, "tile-0-0", "tile-0-1");
+  await expect(page.locator(".board-tile.selected")).toHaveCount(2);
+  await page.keyboard.type("z");
+  await expect(page.locator(".board-tile.selected")).toHaveCount(0);
+  await expect(page.locator(".board-tile")).toHaveCount(3);
+  await selectRegion(page, "tile-0-0", "tile-0-1");
+  await expect(page.locator(".board-tile.selected")).toHaveCount(2);
+  await page.getByText("Keyboard & mouse", { exact: true }).click();
+  await expect(page.locator(".board-tile.selected")).toHaveCount(0);
+});
+
+test("Shift arrows extend and shrink a region for verification and Backspace", async ({ page }) => {
+  await custom(page, "CATT", 4, "CAT");
+  await page.keyboard.type("cat");
+  await expect(page.getByTestId("tile-0-2")).toHaveText("T");
+  await page.keyboard.press("Shift+ArrowLeft");
+  await expect(page.locator(".board-tile.selected")).toHaveCount(1);
+  await page.keyboard.press("Shift+ArrowLeft");
+  await page.keyboard.press("Shift+ArrowLeft");
+  await expect(page.locator(".board-tile.selected")).toHaveCount(3);
+  await page.keyboard.press("Shift+ArrowRight");
+  await expect(page.locator(".board-tile.selected")).toHaveCount(2);
+  await page.keyboard.press("Shift+ArrowLeft");
+  await page.getByRole("button", { name: "Verify selected (3)" }).click();
+  await expect(page.locator(".status-strip")).toContainText("Selected region is valid.");
+  await page.getByTestId("board").focus();
+  await page.keyboard.press("Shift+ArrowRight");
+  await expect(page.locator(".board-tile.selected")).toHaveCount(2);
+  await page.keyboard.press("Backspace");
+  await expect(page.getByTestId("tile-0-0")).toHaveCount(0);
+  await expect(page.getByTestId("tile-0-1")).toHaveCount(0);
+  await expect(page.getByTestId("tile-0-2")).toHaveText("T");
+  await expect(page.locator(".rack-tile")).toHaveCount(3);
+  await page.keyboard.press("Shift+ArrowRight");
+  await expect(page.locator(".board-tile.selected")).toHaveCount(1);
+  await page.keyboard.press("ArrowLeft");
+  await expect(page.locator(".board-tile.selected")).toHaveCount(0);
+});
+
+test("Verify selected checks only that region and highlights invalid words without changing tiles", async ({ page }) => {
+  await custom(page, "CATTT", 5, "CAT");
+  const verify = page.getByRole("button", { name: /^Verify selected/ });
+  await expect(verify).toBeDisabled();
+  await page.keyboard.type("catt");
+  await expect(page.getByTestId("tile-0-3")).toHaveText("T");
+  await selectRegion(page, "tile-0-0", "tile-0-2");
+  await verify.click();
+  await expect(page.locator(".status-strip")).toContainText("Selected region is valid.");
+  await expect(page.locator(".board-tile.selected")).toHaveCount(0);
+  await expect(verify).toBeDisabled();
+  await expect(page.locator(".board-tile")).toHaveCount(4);
+  await expect(page.locator(".rack-tile")).toHaveCount(1);
+  await expect(page.getByTestId("pool-count")).toHaveText("0");
+  await selectRegion(page, "tile-0-0", "tile-0-3");
+  await verify.click();
+  await expect(page.locator(".status-strip")).toContainText("Selected region is not valid.");
+  await expect(page.locator(".status-strip")).toContainText("Check CATT.");
+  await expect(page.locator(".board-tile.invalid")).toHaveCount(4);
+  await expect(page.locator(".rack-tile")).toHaveCount(1);
+  await page.getByRole("button", { name: "Undo placement" }).click();
+  await expect(page.getByTestId("tile-0-3")).toHaveCount(0);
+  await expect(page.locator(".board-tile.invalid")).toHaveCount(0);
+  await expect(page.locator(".status-strip")).not.toContainText("Selected region");
+});
+
 test("pointer controls: rack drop, group move, rejected collision, return, pan and zoom", async ({
   page,
 }) => {
@@ -123,6 +287,7 @@ test("pointer controls: rack drop, group move, rejected collision, return, pan a
   await drag(page, origin, { x: origin.x - 96, y: origin.y - 48 });
   await expect(page.getByTestId("tile--1--2")).toHaveText("C");
   await expect(page.getByTestId("tile--1--1")).toHaveText("A");
+  await expect(page.locator(".board-tile.selected")).toHaveCount(0);
   // Place an unselected blocker, then attempt to move the selected group onto it.
   await page.getByRole("button", { name: "Select T", exact: true }).click();
   await page.mouse.click(origin.x, origin.y - 48);
@@ -141,6 +306,9 @@ test("pointer controls: rack drop, group move, rejected collision, return, pan a
   );
   await expect(page.getByTestId("tile--1--2")).toHaveText("C");
   await expect(page.getByTestId("tile--1-0")).toHaveText("T");
+  await expect(page.locator(".board-tile.selected")).toHaveCount(0);
+  await selectRegion(page, "tile--1--2", "tile--1--1");
+  await expect(page.locator(".board-tile.selected")).toHaveCount(2);
   await page.getByRole("button", { name: "Return selected (2)" }).click();
   await expect(page.locator(".board-tile")).toHaveCount(1);
   const rack = await page.getByTestId("rack").boundingBox();
@@ -206,7 +374,10 @@ test("nested static mount resolves production worker and wasm relative to the ap
     await route.fulfill({ response });
   });
   await page.goto("/table/");
-  await page.getByRole("button", { name: "Try development table" }).click();
+  await page.getByText("Table settings", { exact: true }).click();
+  await page.getByLabel("Starting rack size").fill("3");
+  await page.getByLabel("Tile supply (one letter per tile)").fill("CAT");
+  await page.getByRole("button", { name: "Start Solo", exact: true }).click();
   await expect(page.getByTestId("board")).toBeVisible();
   await page.keyboard.type("cat");
   await expect(page.getByTestId("tile-0-2")).toHaveText("T");

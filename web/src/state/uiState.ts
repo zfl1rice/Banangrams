@@ -9,6 +9,7 @@ export type UIState = {
   selectedRack: number | null;
   history: Position[];
   validation: Validation | null;
+  validationScope: "board" | "selection";
   notice: string;
   conflict: Position | null;
   busy: boolean;

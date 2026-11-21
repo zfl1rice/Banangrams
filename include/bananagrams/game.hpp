@@ -30,6 +30,10 @@ class Game {
     // Move a valid selection atomically using Board's movement contract.
     [[nodiscard]] ActionResult move_tiles(PlayerId player, const std::vector<Position>& positions,
                                           Position offset);
+    // Validate only selected tiles at their current coordinates, without changing
+    // inventory, drawing, or completing the match. Also available after completion.
+    [[nodiscard]] ActionResult validate_selection(PlayerId player,
+                                                  const std::vector<Position>& positions) const;
     // Return one rack tile first, then draw up to 3, possibly that same tile again.
     // Allowed with an empty pool; opponents draw nothing. Failures change nothing.
     [[nodiscard]] ActionResult dump(PlayerId player, char letter);

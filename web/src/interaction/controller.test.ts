@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { Controller } from "./controller";
+import { Controller, type Intent } from "./controller";
 import { keyboardIntent } from "./keyboard";
 import { fitBoard, toBoard, zoomAt } from "../board/coordinates";
 import { reconcileRack } from "../state/uiState";
@@ -53,6 +53,154 @@ function reply(
   };
 }
 describe("ordered interaction controller", () => {
+  it("extends and shrinks a keyboard rectangle across empty squares and negative coordinates", async () => {
+    const initial = observation();
+    initial.board = [
+      { row: 0, col: 0, letter: "C" },
+      { row: -1, col: -1, letter: "A" },
+      { row: -1, col: 0, letter: "T" },
+      { row: 2, col: 2, letter: "S" },
+    ];
+    const { controller, calls } = setup(initial, []);
+    await controller.dispatch({ type: "extendSelection", offset: { row: 0, col: -1 } });
+    expect(controller.getSnapshot().selected).toEqual([initial.board[0]]);
+    await controller.dispatch({ type: "extendSelection", offset: { row: -1, col: 0 } });
+    expect(controller.getSnapshot().selected).toEqual(initial.board.slice(0, 3));
+    await controller.dispatch({ type: "extendSelection", offset: { row: 0, col: 1 } });
+    expect(controller.getSnapshot().selected).toEqual([initial.board[0], initial.board[2]]);
+    await controller.dispatch({ type: "arrow", offset: { row: 0, col: -1 } });
+    expect(controller.getSnapshot().selected).toEqual([]);
+    await controller.dispatch({ type: "extendSelection", offset: { row: 0, col: 1 } });
+    expect(controller.getSnapshot().selected).toEqual(initial.board.slice(1, 3));
+    expect(calls).toEqual([]);
+    controller.dispose();
+  });
+
+  it("keeps an empty keyboard selection anchor until another action resets it", async () => {
+    const initial = observation();
+    initial.board = [{ row: 0, col: 0, letter: "C" }, { row: 0, col: 3, letter: "A" }];
+    const { controller } = setup(initial, []);
+    await controller.dispatch({ type: "cursor", position: { row: 0, col: 2 } });
+    await controller.dispatch({ type: "extendSelection", offset: { row: 0, col: -1 } });
+    expect(controller.getSnapshot().selected).toEqual([]);
+    await controller.dispatch({ type: "extendSelection", offset: { row: 0, col: 1 } });
+    await controller.dispatch({ type: "extendSelection", offset: { row: 0, col: 1 } });
+    expect(controller.getSnapshot().selected).toEqual([initial.board[1]]);
+    await controller.dispatch({ type: "type", letter: "Z" }); // Unsuccessful action still resets the anchor.
+    await controller.dispatch({ type: "extendSelection", offset: { row: 0, col: -1 } });
+    expect(controller.getSnapshot().selected).toEqual([initial.board[1]]);
+    controller.dispose();
+  });
+
+  it("verifies the selection without consuming rack tiles or placement history", async () => {
+    const initial = observation("CAT");
+    const placed = { ...observation("AT"), board: [{ row: 0, col: 0, letter: "C" }] };
+    const validation: Validation = {
+      valid: false, invalidWords: [], components: [[{ row: 0, col: 0 }]], hasAtLeastTwoTiles: false,
+    };
+    const { controller, calls } = setup(initial, [reply(placed), reply(placed, true, validation)]);
+    await controller.dispatch({ type: "type", letter: "C" });
+    const before = controller.getSnapshot();
+    await controller.dispatch({ type: "selectAt", position: { row: 0, col: 0 } });
+    void controller.dispatch({ type: "verifySelected" });
+    await controller.dispatch({ type: "deselect" }); // Toolbar click bubbles after verification.
+    expect(calls[1]).toEqual({ type: "validate", positions: [{ row: 0, col: 0 }] });
+    expect(controller.getSnapshot()).toMatchObject({
+      observation: before.observation, rack: before.rack, cursor: before.cursor,
+      history: before.history, selected: [], validation, validationScope: "selection",
+    });
+    controller.dispose();
+  });
+
+  it("returns the selected region atomically with Backspace, even without a cursor", async () => {
+    const initial = observation("");
+    initial.board = [
+      { row: -1, col: -2, letter: "C" },
+      { row: -1, col: -1, letter: "A" },
+      { row: 2, col: 3, letter: "T" },
+    ];
+    const returned = { ...observation("CA"), board: [initial.board[2]] };
+    const { controller, calls } = setup(initial, [reply(returned)]);
+    await controller.dispatch({ type: "cursor", position: null });
+    void controller.dispatch({ type: "selectRectangle", from: { row: -1, col: -2 }, to: { row: -1, col: -1 } });
+    await controller.dispatch({ type: "backspace" });
+    expect(calls).toEqual([{ type: "return", positions: initial.board.slice(0, 2) }]);
+    expect(controller.getSnapshot().observation.board).toEqual(returned.board);
+    expect(controller.getSnapshot().rack.map(t => t.letter).sort()).toEqual(["A", "C"]);
+    expect(controller.getSnapshot().cursor).toBeNull();
+    expect(controller.getSnapshot().selected).toEqual([]);
+    controller.dispose();
+  });
+  it("an arrow consumes the region before the next Backspace targets its cursor tile", async () => {
+    const initial = observation("T");
+    initial.board = [{ row: 0, col: 0, letter: "C" }, { row: 0, col: 1, letter: "A" }];
+    const returned = { ...observation("AT"), board: [initial.board[0]] };
+    const { controller, calls } = setup(initial, [reply(returned)]);
+    await controller.dispatch({ type: "select", positions: initial.board });
+    void controller.dispatch({ type: "arrow", offset: { row: 0, col: 1 } });
+    await controller.dispatch({ type: "backspace" });
+    expect(calls).toEqual([{ type: "return", positions: [{ row: 0, col: 1 }] }]);
+    expect(controller.getSnapshot().selected).toEqual([]);
+    expect(controller.getSnapshot().observation.board).toEqual(returned.board);
+    controller.dispose();
+  });
+  it.each<Intent>([
+    { type: "toggle" }, { type: "space" }, { type: "cursor", position: null },
+    { type: "click", position: { row: 3, col: 3 } }, { type: "type", letter: "Z" },
+    { type: "undo" }, { type: "dump" }, { type: "sort" }, { type: "shuffle" },
+    { type: "delete" }, { type: "escape" }, { type: "deselect" },
+    { type: "selectRack", id: -1 }, { type: "rackDrop", id: -1, position: { row: 3, col: 3 } },
+    { type: "moveSelected", offset: { row: 0, col: 0 } },
+  ])("$type clears the region even when no board edit happens", async (intent) => {
+    const initial = observation("T");
+    initial.board = [{ row: 1, col: 1, letter: "C" }];
+    const { controller, calls } = setup(initial, []);
+    await controller.dispatch({ type: "select", positions: initial.board });
+    await controller.dispatch(intent);
+    expect(controller.getSnapshot().selected).toEqual([]);
+    expect(controller.getSnapshot().observation.board).toEqual(initial.board);
+    expect(calls).toEqual([]);
+    controller.dispose();
+  });
+  it.each<Intent>([
+    { type: "click", position: { row: 0, col: 1 } },
+    { type: "arrow", offset: { row: 0, col: 1 } },
+  ])("Backspace removes the current tile after $type and stops on the empty square", async (navigation) => {
+    const initial = observation("T");
+    initial.board = [
+      { row: 0, col: 0, letter: "C" },
+      { row: 0, col: 1, letter: "A" },
+    ];
+    const removed = { ...observation("AT"), board: [initial.board[0]] };
+    const { controller, calls } = setup(initial, [reply(removed)]);
+    void controller.dispatch(navigation);
+    await controller.dispatch({ type: "backspace" });
+    await controller.dispatch({ type: "backspace" });
+    expect(calls).toEqual([{ type: "return", positions: [{ row: 0, col: 1 }] }]);
+    expect(controller.getSnapshot().cursor).toEqual({ row: 0, col: 1 });
+    expect(controller.getSnapshot().observation.board).toEqual(removed.board);
+    controller.dispose();
+  });
+  it.each([false, true])("typing after navigation restores backward deletion (vertical=%s)", async (vertical) => {
+    const initial = observation("A");
+    const start = { row: -2, col: -2 };
+    const end = { row: vertical ? -1 : -2, col: vertical ? -2 : -1 };
+    initial.board = [{ ...end, letter: "T" }];
+    const placed = { ...observation(""), board: [...initial.board, { ...start, letter: "A" }] };
+    const { controller, calls } = setup(initial, [reply(placed), reply(initial)]);
+    await controller.dispatch({ type: "click", position: start });
+    if (vertical) await controller.dispatch({ type: "toggle" });
+    void controller.dispatch({ type: "type", letter: "A" });
+    void controller.dispatch({ type: "backspace" });
+    await controller.dispatch({ type: "backspace" });
+    expect(calls).toEqual([
+      { type: "place", letter: "A", position: start },
+      { type: "return", positions: [start] },
+    ]);
+    expect(controller.getSnapshot().cursor).toEqual(start);
+    expect(controller.getSnapshot().observation.board).toEqual(initial.board);
+    controller.dispose();
+  });
   it("places rapid CAT at successive confirmed positions", async () => {
     const a = observation("AT");
     a.board = [{ row: 0, col: 0, letter: "C" }];
@@ -194,12 +342,15 @@ describe("ordered interaction controller", () => {
       offset: { row: 1, col: 0 },
     });
     expect(controller.getSnapshot().history).toHaveLength(1);
+    expect(controller.getSnapshot().selected).toEqual([]);
+    await controller.dispatch({ type: "selectAt", position: { row: 0, col: 0 } });
     await controller.dispatch({
       type: "moveSelected",
       offset: { row: -1, col: 0 },
     });
     expect(calls.map((c) => c.type)).toEqual(["place", "move", "move"]);
     expect(controller.getSnapshot().history).toEqual([]);
+    expect(controller.getSnapshot().selected).toEqual([]);
     controller.dispose();
   });
   it("does not apply responses or queued commands after disposal", async () => {
@@ -241,6 +392,13 @@ it("converts negative coordinates and preserves zoom anchor", () => {
   expect(toBoard(300, 200, changed)).toEqual(toBoard(300, 200, camera));
   expect(fitBoard([], 800, 600)).toEqual({ x: 376, y: 276, zoom: 1 });
 });
+it.each(["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"])("uses Shift with %s to extend selection", (key) => {
+  const event = { key, ctrlKey: false, metaKey: false, altKey: false, shiftKey: false };
+  expect(keyboardIntent(event)?.type).toBe("arrow");
+  expect(keyboardIntent({ ...event, shiftKey: true })?.type).toBe("extendSelection");
+  expect(keyboardIntent({ ...event, shiftKey: true, ctrlKey: true })).toBeNull();
+});
+
 it("does not reinterpret modified shortcuts as letters", () => {
   const event = {
     key: "a",

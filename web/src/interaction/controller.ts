@@ -6,6 +6,7 @@ export type Intent =
   | { type: "click"; position: Position }
   | { type: "cursor"; position: Position | null }
   | { type: "arrow"; offset: Position }
+  | { type: "extendSelection"; offset: Position }
   | {
       type:
         | "toggle"
@@ -16,8 +17,10 @@ export type Intent =
         | "undo"
         | "dump"
         | "returnSelected"
+        | "verifySelected"
         | "sort"
-        | "shuffle";
+        | "shuffle"
+        | "deselect";
     }
   | { type: "selectRack"; id: number }
   | { type: "select"; positions: Position[] }
@@ -30,6 +33,9 @@ export class Controller {
   private listeners = new Set<() => void>();
   private chain = Promise.resolve();
   private alive = true;
+  // Navigation targets the current square; typing targets the preceding square.
+  private backspaceAtCursor = false;
+  private selectionAnchor: Position | null = null;
   private timer?: ReturnType<typeof setTimeout>;
   constructor(
     private engine: Engine,
@@ -44,6 +50,7 @@ export class Controller {
       selectedRack: null,
       history: [],
       validation: null,
+      validationScope: "board",
       notice: "",
       conflict: null,
       busy: false,
@@ -90,6 +97,15 @@ export class Controller {
   private tile(position: Position) {
     return this.state.observation.board.find((tile) => same(tile, position));
   }
+  private rectangle(from: Position, to: Position) {
+    return this.state.observation.board.filter(
+      (p) =>
+        p.row >= Math.min(from.row, to.row) &&
+        p.row <= Math.max(from.row, to.row) &&
+        p.col >= Math.min(from.col, to.col) &&
+        p.col <= Math.max(from.col, to.col),
+    );
+  }
   private step(position: Position, distance = 1): Position {
     return {
       row: position.row + (this.state.vertical ? distance : 0),
@@ -97,7 +113,7 @@ export class Controller {
     };
   }
   private async act(action: Action, consumed?: number): Promise<boolean> {
-    if (this.state.observation.status === "finished") return false;
+    if (this.state.observation.status === "finished" && action.type !== "validate") return false;
     this.update({ busy: true });
     try {
       const { observation, result } = await this.engine.act(action);
@@ -126,7 +142,10 @@ export class Controller {
         return false;
       }
       if (action.type !== "dump")
-        this.update({ validation: result.validation });
+        this.update({
+          validation: result.validation,
+          validationScope: action.type === "validate" ? "selection" : "board",
+        });
       if (result.event === "solo_draw" || result.event === "peel")
         this.notify("Peel! A new tile is in your rack.");
       if (result.event === "completed")
@@ -162,8 +181,20 @@ export class Controller {
   }
   private async handle(intent: Intent) {
     const state = this.state;
+    if (intent.type !== "extendSelection") this.selectionAnchor = null;
+    // A selection lasts for one action. Keep this snapshot for actions that
+    // consume the region, but clear its highlight even if that action fails.
+    if (state.selected.length && !["select", "selectRectangle", "selectAt", "extendSelection"].includes(intent.type))
+      this.update({ selected: [] });
     switch (intent.type) {
+      case "deselect":
+        return;
+      case "verifySelected":
+        if (state.selected.length)
+          await this.act({ type: "validate", positions: state.selected });
+        return;
       case "cursor":
+        this.backspaceAtCursor = true;
         this.update({ cursor: intent.position });
         return;
       case "toggle":
@@ -180,6 +211,7 @@ export class Controller {
         });
         return;
       case "arrow": {
+        this.backspaceAtCursor = true;
         const p = state.cursor ?? { row: 0, col: 0 };
         this.update({
           cursor: {
@@ -189,7 +221,23 @@ export class Controller {
         });
         return;
       }
+      case "extendSelection": {
+        const from = state.cursor ?? { row: 0, col: 0 };
+        this.selectionAnchor ??= from;
+        const cursor = {
+          row: from.row + intent.offset.row,
+          col: from.col + intent.offset.col,
+        };
+        this.backspaceAtCursor = true;
+        this.update({
+          cursor,
+          selected: this.rectangle(this.selectionAnchor, cursor),
+          selectedRack: null,
+        });
+        return;
+      }
       case "space":
+        this.backspaceAtCursor = false;
         if (state.cursor) this.update({ cursor: this.step(state.cursor) });
         return;
       case "select":
@@ -200,13 +248,7 @@ export class Controller {
         return;
       case "selectRectangle":
         this.update({
-          selected: state.observation.board.filter(
-            (p) =>
-              p.row >= Math.min(intent.from.row, intent.to.row) &&
-              p.row <= Math.max(intent.from.row, intent.to.row) &&
-              p.col >= Math.min(intent.from.col, intent.to.col) &&
-              p.col <= Math.max(intent.from.col, intent.to.col),
-          ),
+          selected: this.rectangle(intent.from, intent.to),
           selectedRack: null,
         });
         return;
@@ -255,18 +297,22 @@ export class Controller {
         const letter = intent.letter.toUpperCase(),
           existing = this.tile(state.cursor);
         if (existing) {
-          if (existing.letter === letter)
+          if (existing.letter === letter) {
+            this.backspaceAtCursor = false;
             this.update({ cursor: this.step(state.cursor) });
-          else
+          } else
             this.notify(
               `There is already ${existing.letter} here.`,
               state.cursor,
             );
-        } else if (await this.place(letter, state.cursor))
+        } else if (await this.place(letter, state.cursor)) {
+          this.backspaceAtCursor = false;
           this.update({ cursor: this.step(state.cursor) });
+        }
         return;
       }
       case "click": {
+        this.backspaceAtCursor = true;
         const selected = state.rack.find((t) => t.id === state.selectedRack);
         if (selected && !this.tile(intent.position)) {
           if (await this.place(selected.letter, intent.position, selected.id))
@@ -282,10 +328,16 @@ export class Controller {
         return;
       }
       case "backspace": {
+        if (state.selected.length) {
+          await this.remove(state.selected);
+          return;
+        }
         if (!state.cursor) return;
-        const previous = this.step(state.cursor, -1);
-        if (!this.tile(previous) || (await this.remove([previous])))
-          this.update({ cursor: previous });
+        const target = this.backspaceAtCursor
+          ? state.cursor
+          : this.step(state.cursor, -1);
+        if (this.tile(target) && (await this.remove([target])))
+          this.update({ cursor: target });
         return;
       }
       case "delete":
@@ -307,7 +359,7 @@ export class Controller {
         return;
       }
       case "moveSelected":
-        if (!intent.offset.row && !intent.offset.col) return;
+        if (!state.selected.length || (!intent.offset.row && !intent.offset.col)) return;
         if (
           await this.act({
             type: "move",
@@ -317,10 +369,6 @@ export class Controller {
         ) {
           this.update({
             history: [],
-            selected: state.selected.map((p) => ({
-              row: p.row + intent.offset.row,
-              col: p.col + intent.offset.col,
-            })),
           });
         }
         return;

@@ -277,6 +277,34 @@ ActionResult Game::move_tiles(PlayerId player_id, const std::vector<Position>& p
     return res;
     
 }
+ActionResult Game::validate_selection(PlayerId player_id,
+                                      const std::vector<Position>& positions) const {
+    ActionResult result;
+    if (player_id >= players_.size()) {
+        result.error = ActionError::invalid_player;
+        return result;
+    }
+    if (positions.empty() ||
+        std::unordered_set<Position>(positions.begin(), positions.end()).size() != positions.size()) {
+        result.error = ActionError::invalid_selection;
+        return result;
+    }
+    Board selected;
+    for (const Position position : positions) {
+        const auto letter = players_[player_id].board.tile_at(position);
+        if (!letter) {
+            result.error = ActionError::missing_board_tile;
+            return result;
+        }
+        if (!selected.place(position, *letter)) {
+            throw std::logic_error("Existing board tile could not be copied for validation");
+        }
+    }
+    result.validation = validate_board(selected, lexicon_);
+    result.success = true;
+    return result;
+}
+
 ActionResult Game::dump(PlayerId player_id, char letter) {
     ActionResult res = ActionResult();
     if (status_ == MatchStatus::finished) {

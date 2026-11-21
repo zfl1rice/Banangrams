@@ -27,6 +27,14 @@ export function GameControls({
         <button onClick={fit}>Fit board</button>
       </div>
       <div className="tool-group">
+        <button
+          disabled={!state.selected.length || state.busy}
+          onClick={() => controller.dispatch({ type: "verifySelected" })}
+          title="Check only the selected tiles as a connected set of words"
+        >
+          Verify selected
+          {state.selected.length ? ` (${state.selected.length})` : ""}
+        </button>
         <button onClick={() => controller.dispatch({ type: "toggle" })}>
           {state.vertical ? "Type vertically" : "Type horizontally"}
         </button>

@@ -99,6 +99,7 @@ public:
                                       : game_->dump(0, letter[0]);
         } else if (type == "return") result = game_->return_tiles(0, positions(command["positions"]));
         else if (type == "move") result = game_->move_tiles(0, positions(command["positions"]), position(command["offset"]));
+        else if (type == "validate") result = game_->validate_selection(0, positions(command["positions"]));
         else throw std::invalid_argument("Unknown action");
         auto out = val::object(); auto action = val::object();
         action.set("success", result.success); action.set("error", errors[static_cast<int>(result.error)]);

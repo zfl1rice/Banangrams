@@ -23,6 +23,7 @@ export type Config = { distribution: number[]; rackSize: number; seed: number };
 export type Action =
   | { type: "place"; letter: string; position: Position }
   | { type: "return"; positions: Position[] }
+  | { type: "validate"; positions: Position[] }
   | { type: "move"; positions: Position[]; offset: Position }
   | { type: "dump"; letter: string };
 export type Result = {

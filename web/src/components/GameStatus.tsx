@@ -4,14 +4,19 @@ export function GameStatus({ state }: { state: UIState }) {
   return (
     <>
       <div className="status-strip" aria-live="polite">
-        {state.observation.status === "finished" ? (
+        {report?.valid && state.validationScope === "selection" ? (
+          <>
+            <strong>Selected region is valid.</strong>
+            <span>All selected tiles form connected, valid words.</span>
+          </>
+        ) : state.observation.status === "finished" && state.validationScope !== "selection" ? (
           <>
             <strong>Bananagrams!</strong> You cleared the pool. Your final board
             is yours to explore.
           </>
         ) : report && !report.valid ? (
           <>
-            <strong>Keep arranging</strong>
+            <strong>{state.validationScope === "selection" ? "Selected region is not valid." : "Keep arranging"}</strong>
             {report.invalidWords.length > 0 && (
               <span>
                 Check {report.invalidWords.map((word) => word.text).join(", ")}.

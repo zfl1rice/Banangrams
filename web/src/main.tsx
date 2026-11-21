@@ -3,10 +3,13 @@ import { createRoot } from "react-dom/client";
 import { EngineClient } from "./engine/client";
 import { Controller } from "./interaction/controller";
 import { GameScreen } from "./components/GameScreen";
+import defaultVocabulary from "../../data/lexicon/words.txt?raw";
 import "./styles/game.css";
 
-// The repository has no production distribution; this is an explicit editable
-// starting preset, not an engine default or a claim of an approved vocabulary.
+const defaultWords = defaultVocabulary.trim().split(/\r?\n/);
+const defaultFilename = "words.txt";
+
+// The tile distribution is an editable starting preset, not an engine default.
 const counts = [
   13, 3, 3, 6, 18, 3, 4, 3, 12, 2, 2, 5, 3, 8, 11, 3, 2, 9, 6, 9, 6, 3, 3, 2, 3,
   2,
@@ -18,8 +21,8 @@ function App() {
   const [controller, setController] = useState<Controller | null>(null);
   const [phase, setPhase] = useState<"start" | "loading" | "playing">("start");
   const [error, setError] = useState("");
-  const [words, setWords] = useState<string[]>([]),
-    [filename, setFilename] = useState("");
+  const [words, setWords] = useState<string[]>(defaultWords),
+    [filename, setFilename] = useState(defaultFilename);
   const [supply, setSupply] = useState(defaultSupply),
     [rackSize, setRackSize] = useState(21);
   const [mode, setMode] = useState(""),
@@ -132,11 +135,10 @@ function App() {
         <div className="start-options">
           <h2>Make yourself a table</h2>
           <div className="vocabulary-note">
-            <strong>Bring your word list</strong>
+            <strong>Your word list is ready</strong>
             <p>
-              The approved vocabulary is not included yet. Load a
-              newline-separated word list you trust, or try the clearly limited
-              development table.
+              Start with the included word list, or choose a different
+              newline-separated .txt file below.
             </p>
           </div>
           <label className="file-label">

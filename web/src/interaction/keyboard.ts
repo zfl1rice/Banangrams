@@ -16,7 +16,8 @@ export function keyboardIntent(
     ArrowUp: { row: -1, col: 0 },
     ArrowDown: { row: 1, col: 0 },
   };
-  if (offsets[event.key]) return { type: "arrow", offset: offsets[event.key] };
+  if (offsets[event.key])
+    return { type: event.shiftKey ? "extendSelection" : "arrow", offset: offsets[event.key] };
   const keys = {
     Tab: "toggle",
     " ": "space",

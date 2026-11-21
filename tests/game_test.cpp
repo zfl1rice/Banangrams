@@ -104,6 +104,65 @@ void conserved(const Game& game, std::size_t players, std::size_t expected) {
 }
 } // namespace
 
+TEST_CASE("Selection validation checks only selected tiles without changing any player") {
+    auto game = all_a_game(2, 5, 14, {"AA"});
+    success(game.place_tile(0, 'A', {-1, -2}));
+    success(game.place_tile(0, 'A', {-1, -1}));
+    success(game.place_tile(0, 'A', {-1, 0}));
+    success(game.place_tile(0, 'A', {0, -1}));
+    const auto before = snapshot(game, 2);
+    const Game& read_only = game;
+    auto result = read_only.validate_selection(0, {{-1, -2}, {-1, -1}, {0, -1}});
+    success(result);
+    REQUIRE(result.validation);
+    CHECK(result.validation->valid); // AA horizontally and vertically, ignoring adjacent A.
+    unchanged(game, before);
+
+    result = read_only.validate_selection(0, {{-1, -2}, {-1, -1}, {-1, 0}});
+    success(result);
+    REQUIRE(result.validation);
+    CHECK_FALSE(result.validation->valid);
+    REQUIRE(result.validation->invalid_words.size() == 1);
+    CHECK(result.validation->invalid_words[0].text == "AAA");
+    CHECK(result.validation->invalid_words[0].positions.front() == Position{-1, -2});
+
+    result = read_only.validate_selection(0, {{-1, -2}, {-1, 0}});
+    success(result);
+    REQUIRE(result.validation);
+    CHECK_FALSE(result.validation->valid);
+    CHECK(result.validation->connected_components.size() == 2);
+
+    result = read_only.validate_selection(0, {{-1, -1}});
+    success(result);
+    REQUIRE(result.validation);
+    CHECK_FALSE(result.validation->valid);
+    CHECK_FALSE(result.validation->has_at_least_two_tiles);
+    unchanged(game, before);
+}
+
+TEST_CASE("Selection validation rejects malformed requests without side effects") {
+    auto game = all_a_game(1, 3, 4);
+    success(game.place_tile(0, 'A', {0, 0}));
+    const auto before = snapshot(game, 1);
+    failure(game.validate_selection(1, {{0, 0}}), ActionError::invalid_player);
+    failure(game.validate_selection(0, {}), ActionError::invalid_selection);
+    failure(game.validate_selection(0, {{0, 0}, {0, 0}}), ActionError::invalid_selection);
+    failure(game.validate_selection(0, {{0, 0}, {0, 1}}), ActionError::missing_board_tile);
+    unchanged(game, before);
+}
+
+TEST_CASE("Selection validation remains read-only after completion") {
+    auto game = all_a_game(1, 2, 2);
+    success(game.place_tile(0, 'A', {0, 0}));
+    success(game.place_tile(0, 'A', {0, 1}), ActionEvent::completed);
+    const auto before = snapshot(game, 1);
+    const auto result = game.validate_selection(0, {{0, 0}, {0, 1}});
+    success(result);
+    REQUIRE(result.validation);
+    CHECK(result.validation->valid);
+    unchanged(game, before);
+}
+
 TEST_CASE("Multiplayer observations describe starting racks without revealing boards") {
     auto game = all_a_game(3, 2, 9);
     for (PlayerId id = 0; id < 3; ++id) {

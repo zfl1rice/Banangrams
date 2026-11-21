@@ -56,6 +56,7 @@ export function GameScreen({
             : "pan";
     if (kind === "rack") void dispatch({ type: "selectRack", id: rackId! });
     if (kind === "board") void dispatch({ type: "selectAt", position });
+    if (kind === "pan" || kind === "rectangle") void dispatch({ type: "deselect" });
     board.current!.focus({ preventScroll: true });
     const next: Gesture = {
       kind,
@@ -83,6 +84,10 @@ export function GameScreen({
     if (current && capture.current?.hasPointerCapture(current.pointerId))
       capture.current.releasePointerCapture(current.pointerId);
     capture.current = null;
+  }
+  function abort() {
+    if (gestureRef.current) void dispatch({ type: "deselect" });
+    cancel();
   }
   function move(event: React.PointerEvent) {
     const current = gestureRef.current;
@@ -139,6 +144,7 @@ export function GameScreen({
               col: target.col - current.origin.col,
             },
           });
+        else void dispatch({ type: "deselect" });
       }
     }
     cancel();
@@ -180,8 +186,14 @@ export function GameScreen({
       className="game"
       onPointerMove={move}
       onPointerUp={end}
-      onPointerCancel={cancel}
-      onLostPointerCapture={cancel}
+      onPointerCancel={abort}
+      onLostPointerCapture={abort}
+      onClick={(event) => {
+        // Child controls enqueue their action first, so Return selected can
+        // consume the region before this clears it for other UI-only clicks.
+        if (!board.current?.contains(event.target as Node))
+          void dispatch({ type: "deselect" });
+      }}
       onKeyDownCapture={(event) => {
         if (event.key === "Escape" && gestureRef.current) {
           cancel();
@@ -247,12 +259,14 @@ export function GameScreen({
               <dd>Change typing direction</dd>
               <dt>Arrow keys / Space</dt>
               <dd>Move cursor / step forward</dd>
-              <dt>Backspace / Delete</dt>
-              <dd>Return previous / current tile</dd>
+              <dt>Backspace</dt>
+              <dd>Return the selected region; otherwise current tile after navigation, previous tile after typing</dd>
+              <dt>Delete</dt>
+              <dd>Return current tile</dd>
               <dt>Ctrl or ⌘ Z</dt>
               <dd>Undo last placement</dd>
-              <dt>Shift + drag</dt>
-              <dd>Select a group of tiles</dd>
+              <dt>Shift + drag / Shift + arrow keys</dt>
+              <dd>Select a region; Shift + arrows extend or shrink it from the starting cursor. Other actions clear it.</dd>
               <dt>Drag empty space</dt>
               <dd>Pan the board</dd>
               <dt>Escape</dt>
